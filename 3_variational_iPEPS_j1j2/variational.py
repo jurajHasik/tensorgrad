@@ -5,11 +5,11 @@ Variational PEPS with automatic differentiation and GPU support
 import io
 import torch
 import numpy as np
-torch.set_num_threads(1)
+torch.set_num_threads(2)
 torch.manual_seed(1879)
 import subprocess
 from utils import kronecker_product as kron
-from utils import save_checkpoint, load_checkpoint
+from utils import save_checkpoint, load_checkpoint, printTensorAsCoordJson
 from ipeps import iPEPS
 from args import args
 
@@ -36,6 +36,7 @@ if __name__=='__main__':
 
     key = args.folder
     key += args.model \
+          + '_J2' + str(args.J2) \
           + '_D' + str(args.D) \
           + '_chi' + str(args.chi)
     if (args.float32):
@@ -88,3 +89,4 @@ if __name__=='__main__':
                 message = ('{} ' + 5*'{:.8f} ').format(epoch, En, Mx, My, Mz, Mg)
                 print ('epoch, En, Mx, My, Mz, Mg', message)
                 logfile.write(message + u'\n')
+                printTensorAsCoordJson(model.A, key+'/peps.json')

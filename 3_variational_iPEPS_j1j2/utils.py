@@ -33,6 +33,32 @@ def symmetrize(A):
 
     return Asymm/Asymm.norm()
 
+def printTensorAsCoordJson(t, output_file):
+    # assume on-site rank-5 tensor phys, up, left, down, right
+    # map it to phys left, up, right, down
+    tdims = t.size()
+    tlength = tdims[0]*tdims[1]*tdims[2]*tdims[3]*tdims[4]
+    with open(output_file,'w') as f:
+        f.write("\"siteId\": \"A\",\n")
+        f.write("\"physDim\": "+str(tdims[0])+",\n")
+        # assuming all auxBondDim are identical
+        f.write("\"auxBondDim\": "+str(tdims[1])+",\n")
+        f.write("\"numEntries\": "+str(tlength)+",\n")
+        f.write("\"entries\": [\n")
+        for p in range(tdims[0]):
+            for u in range(tdims[1]):
+                for l in range(tdims[2]):
+                    for d in range(tdims[3]):
+                        for r in range(tdims[4]):
+                            f.write("\""+str(p)+" "+str(l)+" "+str(u)+" "+str(r)+" "+str(d)+" "
+                                    +str(t[p][u][l][d][r].item())+" 0.0\"")
+                            if((p+1)*(u+1)*(l+1)*(d+1)*(r+1) != tlength):
+                                f.write(",\n")
+                            else:
+                                f.write("\n")
+        f.write("]\n")
+
+
 def save_checkpoint(checkpoint_path, model, optimizer):
     state = {'state_dict': model.state_dict(),
              'optimizer' : optimizer.state_dict()}
