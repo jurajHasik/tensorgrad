@@ -5,13 +5,13 @@ Variational PEPS with automatic differentiation and GPU support
 import io
 import torch
 import numpy as np
-torch.set_num_threads(2)
+from args import args
+torch.set_num_threads(args.omp_cores)
 torch.manual_seed(1879)
 import subprocess
 from utils import kronecker_product as kron
 from utils import save_checkpoint, load_checkpoint, printTensorAsCoordJson
 from ipeps import iPEPS
-from args import args
 
 if __name__=='__main__':
     import time
@@ -70,23 +70,28 @@ if __name__=='__main__':
 
     def closure():
         optimizer.zero_grad()
-        start = time.time()
+        t0_fwd = time.time()
         loss, Mx, My, Mz = model.forward(H, Mpx, Mpy, Mpz, args.chi)
-        forward = time.time()
+        t1_fwd = time.time()
+        t0_bk = time.time()
         loss.backward()
+        t1_bk = time.time()
+        #print("fwd[s]: "+str(t1_fwd-t0_fwd)+" bk[s]: "+str(t1_bk-t0_bk))
         #print (model.A.norm().item(), model.A.grad.norm().item(), loss.item(), Mx.item(), My.item(), Mz.item(), torch.sqrt(Mx**2+My**2+Mz**2).item(), forward-start, time.time()-forward)
         return loss
 
     with io.open(key+'.log', 'a', buffering=1, newline='\n') as logfile:
         for epoch in range(args.Nepochs):
+            t0_iter = time.time()
             loss = optimizer.step(closure)
+            t1_iter = time.time()
             if (epoch%args.save_period==0):
                 save_checkpoint(key+'/peps.tensor'.format(epoch), model, optimizer)
 
             with torch.no_grad():
                 En, Mx, My, Mz = model.forward(H, Mpx, Mpy, Mpz, args.chi if args.chi_obs is None else args.chi_obs)
                 Mg = torch.sqrt(Mx**2+My**2+Mz**2)
-                message = ('{} ' + 5*'{:.8f} ').format(epoch, En, Mx, My, Mz, Mg)
-                print ('epoch, En, Mx, My, Mz, Mg', message)
+                message = ('{} ' + 6*'{:.8f} ').format(epoch, En, Mx, My, Mz, Mg, t1_iter-t0_iter)
+                print ('epoch, En, Mx, My, Mz, Mg, t[s]', message)
                 logfile.write(message + u'\n')
                 printTensorAsCoordJson(model.A, key+'/peps.json')

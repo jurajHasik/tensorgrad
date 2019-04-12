@@ -2,7 +2,7 @@ import argparse
 
 parser = argparse.ArgumentParser(description='')
 parser.add_argument("-folder", default='../data/',help="where to store results")
-parser.add_argument("-omp_cores", default=1,help="number of OpenMP cores")
+parser.add_argument("-omp_cores", type=int, default=1,help="number of OpenMP cores")
 parser.add_argument("-d", type=int, default=2, help="d")
 parser.add_argument("-D", type=int, default=2, help="D")
 parser.add_argument("-chi", type=int, default=20, help="chi")
