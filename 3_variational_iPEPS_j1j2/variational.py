@@ -7,7 +7,7 @@ import torch
 import numpy as np
 from args import args
 torch.set_num_threads(args.omp_cores)
-torch.manual_seed(1879)
+torch.manual_seed(args.seed)
 import subprocess
 from utils import kronecker_product as kron
 from utils import save_checkpoint, load_checkpoint, printTensorAsCoordJson
