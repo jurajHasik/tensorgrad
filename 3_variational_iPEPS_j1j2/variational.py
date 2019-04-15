@@ -35,7 +35,7 @@ if __name__=='__main__':
     print ('total nubmer of trainable parameters:', nparams)
 
     key = args.folder
-    key += args.model \
+    key += args.prefix +'_'+ args.model \
           + '_J2' + str(args.J2) \
           + '_D' + str(args.D) \
           + '_chi' + str(args.chi)
