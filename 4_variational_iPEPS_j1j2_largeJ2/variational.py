@@ -35,10 +35,13 @@ if __name__=='__main__':
     print ('total nubmer of trainable parameters:', nparams)
 
     key = args.folder
+    if len(args.prefix) > 0:
+        key += args.prefix +'_'
     key += args.model \
           + '_J2' + str(args.J2) \
           + '_D' + str(args.D) \
-          + '_chi' + str(args.chi)
+          + '_chi' + str(args.chi) \
+          + '_seed' + str(args.seed)
     if (args.float32):
         key += '_float32'
     cmd = ['mkdir', '-p', key]
@@ -106,4 +109,4 @@ if __name__=='__main__':
                 message = ('{} ' + 6*'{:.8f} ').format(epoch, En, Mx, My, Mz, Mg, t1_iter-t0_iter)
                 print ('epoch, En, Mx, My, Mz, Mg, t[s]', message)
                 logfile.write(message + u'\n')
-                printTensorAsCoordJson(model.A, key+'/peps.json')
+                printTensorAsCoordJson(model.A, key+'/peps.json', symm=True)

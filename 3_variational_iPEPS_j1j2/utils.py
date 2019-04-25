@@ -33,9 +33,14 @@ def symmetrize(A):
 
     return Asymm/Asymm.norm()
 
-def printTensorAsCoordJson(t, output_file):
+def printTensorAsCoordJson(t, output_file, symm=False):
     # assume on-site rank-5 tensor phys, up, left, down, right
     # map it to phys left, up, right, down
+    #    0         1
+    #  1 A 3 ==> 0 A 2 
+    #    2         3
+    if symm:
+        t = symmetrize(t)
     tdims = t.size()
     tlength = tdims[0]*tdims[1]*tdims[2]*tdims[3]*tdims[4]
     with open(output_file,'w') as f:
