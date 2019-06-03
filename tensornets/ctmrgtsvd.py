@@ -1,8 +1,10 @@
 import torch
 from torch.utils.checkpoint import checkpoint
 
-from .adlib import SVD 
-svd = SVD.apply
+from .adlib import RSVD 
+svd = RSVD.apply
+# from .adlib import ARNOLDISVD 
+# svd = ARNOLDISVD.apply
 #from .adlib import EigenSolver
 #symeig = EigenSolver.apply
 
@@ -10,10 +12,10 @@ def renormalize(*tensors):
     # T(up,left,down,right), u=up, l=left, d=down, r=right
     # C(d,r), EL(u,r,d), EU(l,d,r)
 
-    C, E, T, chi = tensors
+    C, E, T, chi, tsvd_extra = tensors
 
     dimT, dimE = T.shape[0], E.shape[0]
-    D_new = min(dimE*dimT, chi)
+    D_new = min(dimE*dimT, int(chi))
 
     # step 1: contruct the density matrix Rho
     Rho = torch.tensordot(C,E,([1],[0]))        # C(ef)*EU(fga)=Rho(ega)
@@ -25,7 +27,7 @@ def renormalize(*tensors):
     Rho = Rho/Rho.norm()
 
     # step 2: Get Isometry P
-    U, S, V = svd(Rho)
+    U, S, V = svd(Rho,D_new+int(tsvd_extra))
     truncation_error = S[D_new:].sum()/S.sum()
     P = U[:, :D_new] # projection operator
     
@@ -52,18 +54,14 @@ def renormalize(*tensors):
     return C/C.norm(), E, S.abs()/S.abs().max(), truncation_error
 
 
-def CTMRG(T, chi, max_iter, use_checkpoint=False):
+def CTMRGTSVD(T, chi, tsvd_extra, max_iter, use_checkpoint=False):
     # T(up, left, down, right)
 
-    threshold = 1E-12 if T.dtype is torch.float64 else 1E-6 # ctmrg convergence threshold
+    threshold = 1E-8 if T.dtype is torch.float64 else 1E-6 # ctmrg convergence threshold
 
     # C(down, right), E(up,right,down)
     C = T.sum((0,1))  #
     E = T.sum(1).permute(0,2,1)
-    # C = torch.rand(chi, chi, dtype=T.dtype, device=T.device)
-    # C = C + C.permute(1,0)
-    # E = torch.rand(chi, T.shape[0], chi, dtype=T.dtype, device=T.device)
-    # E = E + E.permute(2,1,0)
 
     truncation_error = 0.0
     sold = torch.zeros(chi, dtype=T.dtype, device=T.device)
@@ -71,7 +69,7 @@ def CTMRG(T, chi, max_iter, use_checkpoint=False):
     bvar  = 1E1
     bvar3 = 1E1
     for n in range(max_iter):
-        tensors = C, E, T, torch.tensor(chi)
+        tensors = C, E, T, torch.tensor(chi), torch.tensor(tsvd_extra)
         if use_checkpoint: # use checkpoint to save memory
             C, E, s, error = checkpoint(renormalize, *tensors)
         else:
@@ -85,7 +83,6 @@ def CTMRG(T, chi, max_iter, use_checkpoint=False):
             bvar = boundaryVariance(C, E)
             #bvar3 = boundaryVariance3(T, C, E)
             #print( s, sold )
-            #print('ctmrg iteration %d to %.5e, bvar2 %.10e, bvar3 %.10e'%(n, diff, bvar, bvar3) )
         #print( 'n: %d, Enorm: %g, error: %e, diff: %e' % (n, Enorm, error.item(), diff) )
         #if (diff < threshold):
         if (bvar < threshold):
@@ -95,6 +92,7 @@ def CTMRG(T, chi, max_iter, use_checkpoint=False):
         truncation error: %.5f'%(n, diff, bvar, bvar3, truncation_error))
 
     return C, E
+
 
 def boundaryVariance(C, E, dbg = False):
     # C-- 1 -> 0
@@ -170,6 +168,7 @@ def boundaryVariance(C, E, dbg = False):
     if dbg:
         print('<L|R> = %.10e ; <L|TT|R>/<L|R> = %.10e ; <L|T|R>/<L|R> = %.10e'%(bnorm, lbttrb/bnorm, lbtrb/bnorm))
     return abs(lbttrb/bnorm) - (lbtrb/bnorm)*(lbtrb/bnorm)
+
 
 def boundaryVariance3(A, C, E, dbg = False):
     # C-- 1 -> 0
@@ -292,12 +291,12 @@ def boundaryVariance3(A, C, E, dbg = False):
         print('<L|R> = %.10e ; <L|TT|R>/<L|R> = %.10e ; <L|T|R>/<L|R> = %.10e'%(bnorm, lbttrb/bnorm, lbtrb/bnorm))
     return abs(lbttrb/bnorm) - (lbtrb/bnorm)*(lbtrb/bnorm)
 
-
 if __name__=='__main__':
     import time
     torch.manual_seed(42)
     D = 6
     chi = 80
+    tsvd_extra = 20
     max_iter = 100
     device = 'cpu'
 
@@ -310,8 +309,8 @@ if __name__=='__main__':
     T = (T + T.permute(1, 0, 3, 2))/2.      # digonal symmetry
     T = T/T.norm()
 
-    C, E = CTMRG(T, chi, max_iter, use_checkpoint=True)
-    C, E = CTMRG(T, chi, max_iter, use_checkpoint=False)
+    C, E = CTMRGTSVD(T, chi, max_iter, tsvd_extra, use_checkpoint=True)
+    C, E = CTMRGTSVD(T, chi, max_iter, tsvd_extra, use_checkpoint=False)
     print( 'diffC = ', torch.dist( C, C.t() ) )
     print( 'diffE = ', torch.dist( E, E.permute(2,1,0) ) )
 
