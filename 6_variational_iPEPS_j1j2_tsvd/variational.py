@@ -32,7 +32,7 @@ if __name__=='__main__':
     params = list(model.parameters())
     params = list(filter(lambda p: p.requires_grad, params))
     nparams = sum([np.prod(p.size()) for p in params])
-    print ('total nubmer of trainable parameters:', nparams)
+    print ('total number of trainable parameters:', nparams)
 
     key = args.folder
     if len(args.prefix) > 0:
@@ -41,6 +41,7 @@ if __name__=='__main__':
           + '_J2' + str(args.J2) \
           + '_D' + str(args.D) \
           + '_chi' + str(args.chi) \
+          + '_tsvd' + str(args.tsvd_extra) \
           + '_seed' + str(args.seed)
     if (args.float32):
         key += '_float32'
@@ -83,6 +84,7 @@ if __name__=='__main__':
         #print (model.A.norm().item(), model.A.grad.norm().item(), loss.item(), Mx.item(), My.item(), Mz.item(), torch.sqrt(Mx**2+My**2+Mz**2).item(), forward-start, time.time()-forward)
         return loss
 
+    best_E = 1E16
     with io.open(key+'.log', 'a', buffering=1, newline='\n') as logfile:
         for epoch in range(args.Nepochs):
             t0_iter = time.time()
@@ -98,3 +100,6 @@ if __name__=='__main__':
                 print ('epoch, En, Mx, My, Mz, Mg, t[s]', message)
                 logfile.write(message + u'\n')
                 printTensorAsCoordJson(model.A, key+'/peps.json', symm=True)
+                if best_E > En:
+                    printTensorAsCoordJson(model.A, key+'/bestE-peps.json', symm=True)
+                    best_E = En
