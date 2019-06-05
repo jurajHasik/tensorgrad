@@ -5,7 +5,7 @@ We reimplement it with a safe inverse function in light of degenerated singular 
 
 import numpy as np
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as Functional
 import scipy.sparse.linalg
 
 def safe_inverse(x, epsilon=1E-12):
@@ -59,14 +59,18 @@ class ARNOLDISVD(torch.autograd.Function):
         # compute right singular vectors as Mt = V.S.Ut /.U => Mt.U = V.S
         # since M = Mt, M.U = V.S
         V = M @ U
-        V = F.normalize(V, p=0.5, dim=1)
+        V = Functional.normalize(V, p=2, dim=0)
 
-        #print("U "+str(U.shape))
-        #print(U.stride())
+        # print("U "+str(U.shape))
+        # print(U.stride())
+        # for i in range(k):
+        #     print(str(i)+": "+str(np.linalg.norm(U[:,i])))
         #print(S.shape)
         #print(S)
-        #print("V "+str(V.shape))
-        #print(V.stride())
+        # print("V "+str(V.shape))
+        # print(V.stride())
+        # for i in range(k):
+        #     print(str(i)+": "+str(np.linalg.norm(V[:,i])))
 
         self.save_for_backward(U, S, V)
         return U, S, V

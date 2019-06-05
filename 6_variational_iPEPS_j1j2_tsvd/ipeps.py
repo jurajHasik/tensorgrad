@@ -16,6 +16,7 @@ class iPEPS(torch.nn.Module):
         self.chi = args.chi
         self.tsvd_extra = args.tsvd_extra
         self.Niter = args.Niter
+        self.threshold = args.ctm_threshold
         self.use_checkpoint = use_checkpoint 
         
         d, D = self.d, self.D
@@ -40,7 +41,7 @@ class iPEPS(torch.nn.Module):
         T = T.permute(0,4, 1,5, 2,6, 3,7).contiguous().view(D**2, D**2, D**2, D**2)
         T = T/T.norm()
 
-        C, E = CTMRGTSVD(T, chi, tsvd_extra, Niter, self.use_checkpoint) 
+        C, E = CTMRGTSVD(T, chi, tsvd_extra, Niter, self.threshold, self.use_checkpoint) 
         loss, Mx, My, Mz = get_obs(Asymm, H, Mpx, Mpy, Mpz, C, E)
 
         return loss, Mx, My, Mz 

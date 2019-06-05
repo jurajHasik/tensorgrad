@@ -1,10 +1,10 @@
 import torch
 from torch.utils.checkpoint import checkpoint
 
-from .adlib import RSVD 
-svd = RSVD.apply
-# from .adlib import ARNOLDISVD 
-# svd = ARNOLDISVD.apply
+#from .adlib import RSVD 
+#svd = RSVD.apply
+from .adlib import ARNOLDISVD 
+svd = ARNOLDISVD.apply
 #from .adlib import EigenSolver
 #symeig = EigenSolver.apply
 
@@ -18,19 +18,41 @@ def renormalize(*tensors):
     D_new = min(dimE*dimT, int(chi))
 
     # step 1: contruct the density matrix Rho
+    # C--1 0--E--2->2
+    # |0      |1
     Rho = torch.tensordot(C,E,([1],[0]))        # C(ef)*EU(fga)=Rho(ega)
+    # C----E--2->1
+    # |0   |1->0
+    # |0 
+    # E--1->2
+    # |2->3
     Rho = torch.tensordot(Rho,E,([0],[0]))      # Rho(ega)*EL(ehc)=Rho(gahc)
+    # C-------E--1->0
+    # |       |0
+    # |       |0
+    # E--2 1--T--3->3
+    # |3->1   |2->2
     Rho = torch.tensordot(Rho,T,([0,2],[0,1]))  # Rho(gahc)*T(ghdb)=Rho(acdb)
+    # C--03->01
+    # |
+    # 12->34
     Rho = Rho.permute(0,3,1,2).contiguous().view(dimE*dimT, dimE*dimT)  # Rho(acdb)->Rho(ab;cd)
 
     Rho = Rho+Rho.t()
     Rho = Rho/Rho.norm()
 
+    # C--E-- => S--U 
+    # |  |   => |
+    # |  |   => V^dag
+    # E--T-- =>
+    # |  |   =>
+
     # step 2: Get Isometry P
     U, S, V = svd(Rho,D_new+int(tsvd_extra))
     truncation_error = S[D_new:].sum()/S.sum()
     P = U[:, :D_new] # projection operator
-    
+    #Pt = V[:, :D_new]
+
     #can also do symeig since Rho is symmetric 
     #S, U = symeig(Rho)
     #sorted, indices = torch.sort(S.abs(), descending=True)
@@ -43,6 +65,7 @@ def renormalize(*tensors):
 
     ## EL(u,r,d)
     P = P.view(dimE,dimT,D_new)
+    #Pt = Pt.view(dimE,dimT,D_new)
     E = torch.tensordot(E, P, ([0],[0]))  # EL(def)P(dga)=E(efga)
     E = torch.tensordot(E, T, ([0,2],[1,0]))  # E(efga)T(gehb)=E(fahb)
     E = torch.tensordot(E, P, ([0,2],[0,1]))  # E(fahb)P(fhc)=E(abc)
@@ -54,10 +77,12 @@ def renormalize(*tensors):
     return C/C.norm(), E, S.abs()/S.abs().max(), truncation_error
 
 
-def CTMRGTSVD(T, chi, tsvd_extra, max_iter, use_checkpoint=False):
+def CTMRGTSVD(T, chi, tsvd_extra, max_iter, thresh=None, use_checkpoint=False):
     # T(up, left, down, right)
 
     threshold = 1E-8 if T.dtype is torch.float64 else 1E-6 # ctmrg convergence threshold
+    if thresh is not None:
+        threshold = thresh
 
     # C(down, right), E(up,right,down)
     C = T.sum((0,1))  #
