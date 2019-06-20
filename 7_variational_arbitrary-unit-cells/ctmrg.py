@@ -1,25 +1,46 @@
 import torch
 from torch.utils.checkpoint import checkpoint
+from ipeps import IPEPS
 from env import ENV
 
 from .adlib import SVD 
 svd = SVD.apply
 
 
-def CTMRG():
-    # TODO 0) Initialize env tensors C,T
-    
-    # 1) 
-    for i in range(???):
-        ctm_MOVE_UP(ipeps, env)
-        ctm_MOVE_LEFT(ipeps, env)
-        ctm_MOVE_RIGHT(ipeps, env)
-        ctm_MOVE_DOWN(ipeps, env)
-    
-        if ctm_converged():
-            break
+def CTMRG(ipeps, env):
+    # TODO 0) 
+    # x) Create double-layer (DL) tensors, preserving the same convenction
+    # for order of indices 
+    #
+    #     /           /
+    #  --A^dag-- = --a--
+    #   /|          /
+    #    |/
+    #  --A--
+    #   /
+    #
+    sitesDL=dict()
+    for coord,A in ipeps.sites.items():
+        dimsA = A.size()
+        a = torch.einsum('mefgh,mabcd->eafbgchd',(A,A)).contiguous()
+            .view(dimsA[1]**2, dimsA[2]**2, dimsA[3]**2, dimsA[4]**2)
+        sitesDL[coord]=a
+    ipepsDL = IPEPS(None,sitesDL,ipeps.vertexToSite)
 
-    return
+    # x) Initialize env tensors C,T
+    env = init_random(env)
+
+    # 1) 
+    for i in range(50):
+        ctm_MOVE_UP(ipepsDL, env)
+        ctm_MOVE_LEFT(ipepsDL, env)
+        ctm_MOVE_RIGHT(ipepsDL, env)
+        ctm_MOVE_DOWN(ipepsDL, env)
+    
+        #if ctm_converged():
+        #    break
+
+    return env
 
 # def boundaryVariance(env, coord, dir, dbg = False):
 #     # C-- 1 -> 0

@@ -44,11 +44,21 @@ class ENV(torch.nn.Module):
         # |       |       |
         # C--1 1--T--2 1--C
         for coord, site in ipeps.sites.items():
-            for vec in [(-1,0), (1,0), (0,-1), (0,1)]:
-                #T[(coord,vec)]=torch.tensor()
-                #self.T[(coord,vec)]="T"+str((coord,vec))
-                self.T[(coord,vec)]="T"+str(ipeps.site(coord))
+            #for vec in [(0,-1), (-1,0), (0,1), (1,0)]:
+            #    self.T[(coord,vec)]="T"+str(ipeps.site(coord))
+            self.T[(coord,(0,-1))]=torch.empty(args.chi,site.size()[1]*site.size()[1],args.chi)
+            self.T[(coord,(-1,0))]=torch.empty(args.chi,args.chi,site.size()[2]*site.size()[2])
+            self.T[(coord,(0,1))]=torch.empty(site.size()[3]*site.size()[3],args.chi,args.chi)
+            self.T[(coord,(1,0))]=torch.empty(args.chi,site.size()[4]*site.size()[4],args.chi)
+
+            #for vec in [(-1,-1), (-1,1), (1,-1), (1,1)]:
+            #     self.C[(coord,vec)]="C"+str(ipeps.site(coord))
             for vec in [(-1,-1), (-1,1), (1,-1), (1,1)]:
-                #T[(coord,vec)]=torch.tensor()
-                #self.C[(coord,vec)]="C"+str((coord,vec))
-                self.C[(coord,vec)]="C"+str(ipeps.site(coord))
+                self.C[(coord,vec)]=torch.empty(args.chi,args.chi)
+
+def init_random(env):
+    for key,t in env.C:
+        t = torch.rand(t.size())
+    for key,t in env.T:
+        t = torch.rand(t.size())
+    return env
