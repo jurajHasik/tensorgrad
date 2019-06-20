@@ -6,6 +6,39 @@ from env import ENV
 from .adlib import SVD 
 svd = SVD.apply
 
+def truncated_svd(M, chi, abs_tol=None, rel_tol=None):
+    """
+    Performs a truncated SVD on a matrix M.     
+    M ~ (Ut)(St)(Vt)^{T}
+
+    
+    inputs:
+        M (torch.Tensor):
+            tensor of shape (dim0, dim1)
+
+        chi (int):
+            maximum allowed dimension of S
+
+        abs_tol (float):
+            absolute tollerance on singular eigenvalues
+
+        rel_tol (float):
+            relative tollerance on singular eigenvalues
+
+    where S is diagonal matrix of of shape (dimS, dimS)
+    and dimS <= chi
+
+    returns Ut, St, Vt
+    """
+    U, S, V = svd(M)
+    St = S[:chi]
+    if abs_tol is not None: St = St[S > abs_tol]
+    if rel_tol is not None: St = St[S/torch.mean(S) > rel_tol]
+    Ut = Ut[:, :St.shape[0]]
+    Vt = Vt[:, :St.shape[0]]
+    return Ut, St, Vt
+
+
 
 def CTMRG(ipeps, env):
     # TODO 0) 
@@ -286,6 +319,73 @@ def ctm_MOVE_RIGHT(ipeps, env):
     for coord,site in ipeps.items():
         absorb_truncate_CTM_MOVE_RIGHT(coord, ipeps, env, P, Pt)
 
+def ctm_get_porjectors(R, Rt, chi, use_QR = False, tol = 1e-10):
+    """
+    Given the two tensor T and Tt (T tilde) this computes the projectors
+    Computes The projectors (P, P tilde)
+    (PRB 94, 075143 (2016) https://arxiv.org/pdf/1402.2859.pdf)
+    The inices of the input R, Rt are
+
+        R (torch.Tensor):
+            tensor of shape (dim0, dim1, dim2, dim3)
+        Rt (torch.Tensor):
+            tensor of shape (dim0, dim1, dim2, dim3)
+        chi (int):
+            auxiliary bond dimension  
+
+    --------------------
+    |        T         |
+    --------------------
+      |    |    |    |
+     dim0 dim1 dim2 dim3
+      |    |    |    |
+    ---------  
+     \\ P //   
+     -------
+        |
+       chi
+        |
+
+
+        |
+       chi
+        |
+     -------   
+    // Pt  \\
+    ---------
+      |    |    |    |    
+     dim0 dim1 dim2 dim3
+      |    |    |    |    
+    --------------------
+    |        Rt        |
+    --------------------
+    """
+    assert R.shape == Rt.shape
+    assert len(R.shape) == 4
+    #
+    dim0, dim1, dim2, dim4 = R.shape
+    R = R.view(dim0 * dim1, dim2, dim3)
+    R = R.view(dim0 * dim1, dim2 * dim3)
+    Rt = Rt.view(dim0 * dim1, dim2, dim3)
+    Rt = Rt.view(dim0 * dim1, dim2 *  dim3)
+
+    # QR decomposition (I do not understand why this is usefull)
+    if use_QR:
+        Q_qr, R_qr = torch.qr(R)
+        Qt_qr, Rt_qr = torch.qr(Rt)
+        R = R_qr
+        Rt = Rt_qr
+
+    #  SVD decomposition
+    M = torch.mm(R.transpose(1, 0), Rt)
+    U, S, V = truncated_svd(M, chi, tol) # M = USV^{T}
+    S_sqrt = 1 / torch.sqrt(S)
+
+    # 
+    P = torch.mm(S_sqrt, torch.mm(U.transpose(1, 0),R.transpose(1, 0)))
+    Pt = torch.mm(S_sqrt, torch.mm(V.transpose(1, 0),Rt.transpose(1, 0)))
+
+    return P, Pt
 #####################################################################
 # functions performing absorption and truncation step
 #####################################################################
