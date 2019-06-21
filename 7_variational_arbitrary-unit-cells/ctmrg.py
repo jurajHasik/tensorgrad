@@ -74,10 +74,10 @@ def run(ipeps, ctm_env):
         ctm_MOVE_RIGHT(ipepsDL, ctm_env)
         ctm_MOVE_DOWN(ipepsDL, ctm_env)
     
-        for key,C in ctm_env.C.items():
-            U,S,V = torch.svd(C)
-            print(key)
-            print(S)
+        #for key,C in ctm_env.C.items():
+        U,S,V = torch.svd(ctm_env.C[((0,0),(-1,-1))])
+        #print(key)
+        print(S)
 
         #if ctm_converged():
         #    break
@@ -531,7 +531,7 @@ def absorb_truncate_CTM_MOVE_UP(coord, ipeps, env, P, Pt):
     # |        |
     # T2--2 1--
     # 1->0
-    C2 = torch.tensordot(P, nC2,([0,2],[0,1]))
+    C2 = torch.tensordot(nC2, P,([0,2],[0,1]))
 
     #        --0 0--T--2->3
     #       |       1->2
@@ -557,9 +557,9 @@ def absorb_truncate_CTM_MOVE_UP(coord, ipeps, env, P, Pt):
     T = torch.tensordot(nT, P,([1,3],[0,1]))
     T = T.contiguous()
 
-    C1 = C1/torch.max(C1)
-    C2 = C2/torch.max(C2)
-    T = T/torch.max(T)
+    env.C[(coord,(1,-1))] = C1/torch.max(C1)
+    env.C[(coord,(-1,-1))] = C2/torch.max(C2)
+    env.T[(coord,(0,-1))] = T/torch.max(T)
 
 def absorb_truncate_CTM_MOVE_LEFT(coord, ipeps, env, P, Pt):
     C1 = env.C[(coord,(-1,-1))]
@@ -623,9 +623,9 @@ def absorb_truncate_CTM_MOVE_LEFT(coord, ipeps, env, P, Pt):
     T = torch.tensordot(nT, Pt,([1,2],[0,1]))
     T = T.permute(0,2,1).contiguous()
 
-    C1 = C1/torch.max(C1)
-    C2 = C2/torch.max(C2)
-    T = T/torch.max(T)
+    env.C[(coord,(-1,-1))] = C1/torch.max(C1)
+    env.C[(coord,(-1,1))] = C2/torch.max(C2)
+    env.T[(coord,(-1,0))] = T/torch.max(T)
 
 def absorb_truncate_CTM_MOVE_DOWN(coord, ipeps, env, P, Pt):
     C1 = env.C[(coord,(-1,1))]
@@ -691,9 +691,9 @@ def absorb_truncate_CTM_MOVE_DOWN(coord, ipeps, env, P, Pt):
     T = torch.tensordot(nT, Pt,([1,3],[0,1]))
     T = T.permute(1,0,2).contiguous()
 
-    C1 = C1/torch.max(C1)
-    C2 = C2/torch.max(C2)
-    T = T/torch.max(T)
+    env.C[(coord,(-1,1))] = C1/torch.max(C1)
+    env.C[(coord,(1,1))] = C2/torch.max(C2)
+    env.T[(coord,(0,1))] = T/torch.max(T)
 
 def absorb_truncate_CTM_MOVE_RIGHT(coord, ipeps, env, P, Pt):
     C1 = env.C[(coord,(1,1))]
@@ -755,9 +755,9 @@ def absorb_truncate_CTM_MOVE_RIGHT(coord, ipeps, env, P, Pt):
     T = torch.tensordot(nT, P,([1,3],[0,1]))
     T = T.contiguous()
 
-    C1 = C1/torch.max(C1)
-    C2 = C2/torch.max(C2)
-    T = T/torch.max(T)
+    env.C[(coord,(1,1))] = C1/torch.max(C1)
+    env.C[(coord,(1,-1))] = C2/torch.max(C2)
+    env.T[(coord,(1,0))] = T/torch.max(T)
 
 #####################################################################
 # functions building pair of 4x2 (or 2x4) halves of 4x4 TN
