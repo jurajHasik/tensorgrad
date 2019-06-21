@@ -4,9 +4,10 @@ sys.path.insert(0, '../')
 import torch
 import time
 from args import args
-from ipeps import IPEPS
+import env
 from env import ENV
 import ipeps
+import ctmrg
 
 if __name__=='__main__':
 
@@ -26,6 +27,10 @@ if __name__=='__main__':
 		for x in range(-lx//2,lx//2):
 			print(str(state.vertexToSite((x,y)))+" ", end="")
 		print("")
+
+	ctm_env = ENV(args,state)
+	ctm_env = ctmrg.run(state,ctm_env)
+
 
 	state = ipeps.read_ipeps(None, "test-input/RVB_2x2_ABCD.in")
 

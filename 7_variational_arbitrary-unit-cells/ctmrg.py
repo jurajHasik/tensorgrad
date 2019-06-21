@@ -1,10 +1,12 @@
 import torch
 from torch.utils.checkpoint import checkpoint
+import ipeps
 from ipeps import IPEPS
+import env
 from env import ENV
 
-from .adlib import SVD 
-svd = SVD.apply
+#from .adlib import SVD 
+#svd = SVD.apply
 
 def truncated_svd(M, chi, abs_tol=None, rel_tol=None):
     """
@@ -30,17 +32,16 @@ def truncated_svd(M, chi, abs_tol=None, rel_tol=None):
 
     returns Ut, St, Vt
     """
-    U, S, V = svd(M)
+    U, S, V = torch.svd(M)
     St = S[:chi]
-    if abs_tol is not None: St = St[S > abs_tol]
-    if rel_tol is not None: St = St[S/torch.mean(S) > rel_tol]
-    Ut = Ut[:, :St.shape[0]]
-    Vt = Vt[:, :St.shape[0]]
+    if abs_tol is not None: St = St[St > abs_tol]
+    if rel_tol is not None: St = St[St/St[0] > rel_tol]
+
+    Ut = U[:, :St.shape[0]]
+    Vt = V[:, :St.shape[0]]
     return Ut, St, Vt
 
-
-
-def CTMRG(ipeps, env):
+def run(ipeps, ctm_env):
     # TODO 0) 
     # x) Create double-layer (DL) tensors, preserving the same convenction
     # for order of indices 
@@ -55,25 +56,33 @@ def CTMRG(ipeps, env):
     sitesDL=dict()
     for coord,A in ipeps.sites.items():
         dimsA = A.size()
-        a = torch.einsum('mefgh,mabcd->eafbgchd',(A,A)).contiguous()
-            .view(dimsA[1]**2, dimsA[2]**2, dimsA[3]**2, dimsA[4]**2)
+        a = torch.einsum('mefgh,mabcd->eafbgchd',(A,A)).contiguous().view(dimsA[1]**2,\
+            dimsA[2]**2, dimsA[3]**2, dimsA[4]**2)
         sitesDL[coord]=a
     ipepsDL = IPEPS(None,sitesDL,ipeps.vertexToSite)
 
     # x) Initialize env tensors C,T
-    env = init_random(env)
+    ctm_env = env.init_random(ctm_env)
+    env.print_env(ctm_env)
 
     # 1) 
     for i in range(50):
-        ctm_MOVE_UP(ipepsDL, env)
-        ctm_MOVE_LEFT(ipepsDL, env)
-        ctm_MOVE_RIGHT(ipepsDL, env)
-        ctm_MOVE_DOWN(ipepsDL, env)
+        print("CTMRG step "+str(i))
+
+        ctm_MOVE_UP(ipepsDL, ctm_env)
+        ctm_MOVE_LEFT(ipepsDL, ctm_env)
+        ctm_MOVE_RIGHT(ipepsDL, ctm_env)
+        ctm_MOVE_DOWN(ipepsDL, ctm_env)
     
+        for key,C in ctm_env.C.items():
+            U,S,V = torch.svd(C)
+            print(key)
+            print(S)
+
         #if ctm_converged():
         #    break
 
-    return env
+    return ctm_env
 
 # def boundaryVariance(env, coord, dir, dbg = False):
 #     # C-- 1 -> 0
@@ -274,57 +283,151 @@ def CTMRG(ipeps, env):
 def ctm_MOVE_UP(ipeps, env):
     # Loop over all non-equivalent sites of ipeps
     # and compute projectors P(coord), P^tilde(coord)
-    for coord,site in ipeps.items():
+    P = dict()
+    Pt = dict()
+    for coord,site in ipeps.sites.items():
         # TODO compute isometries
-        P[(coord)], Pt[coord] = result_of_compute_isometry
+        P[(coord)], Pt[coord] = ctm_get_projectors_CTM_MOVE_UP(coord, ipeps, env)
 
     # Loop over all non-equivalent sites of ipeps
     # and perform absorption and truncation
-    for coord,site in ipeps.items():
-        absorb_truncate_CTM_MOVE_UP(coord, ipeps, env, P, Pt)
+    for coord,site in ipeps.sites.items():
+        absorb_truncate_CTM_MOVE_UP(coord, ipeps, env, P[coord], Pt[coord])
 
 def ctm_MOVE_LEFT(ipeps, env):
     # Loop over all non-equivalent sites of ipeps
     # and compute projectors P(coord), P^tilde(coord)
-    for coord,site in ipeps.items():
+    P = dict()
+    Pt = dict()
+    for coord,site in ipeps.sites.items():
         # TODO compute isometries
-        P[(coord)], Pt[coord] = result_of_compute_isometry
+        P[(coord)], Pt[coord] = ctm_get_projectors_CTM_MOVE_LEFT(coord, ipeps, env)
 
     # Loop over all non-equivalent sites of ipeps
     # and perform absorption and truncation
-    for coord,site in ipeps.items():
-        absorb_truncate_CTM_MOVE_LEFT(coord, ipeps, env, P, Pt)
+    for coord,site in ipeps.sites.items():
+        absorb_truncate_CTM_MOVE_LEFT(coord, ipeps, env, P[coord], Pt[coord])
 
 def ctm_MOVE_DOWN(ipeps, env):
     # Loop over all non-equivalent sites of ipeps
     # and compute projectors P(coord), P^tilde(coord)
-    for coord,site in ipeps.items():
+    P = dict()
+    Pt = dict()
+    for coord,site in ipeps.sites.items():
         # TODO compute isometries
-        P[(coord)], Pt[coord] = result_of_compute_isometry
+        P[(coord)], Pt[coord] = ctm_get_projectors_CTM_MOVE_DOWN(coord, ipeps, env)
 
     # Loop over all non-equivalent sites of ipeps
     # and perform absorption and truncation
-    for coord,site in ipeps.items():
-        absorb_truncate_CTM_MOVE_DOWN(coord, ipeps, env, P, Pt)
+    for coord,site in ipeps.sites.items():
+        absorb_truncate_CTM_MOVE_DOWN(coord, ipeps, env, P[coord], Pt[coord])
 
 def ctm_MOVE_RIGHT(ipeps, env):
     # Loop over all non-equivalent sites of ipeps
     # and compute projectors P(coord), P^tilde(coord)
-    for coord,site in ipeps.items():
+    P = dict()
+    Pt = dict()
+    for coord,site in ipeps.sites.items():
         # TODO compute isometries
-        P[(coord)], Pt[coord] = result_of_compute_isometry
+        P[(coord)], Pt[coord] = ctm_get_projectors_CTM_MOVE_RIGHT(coord, ipeps, env)
 
     # Loop over all non-equivalent sites of ipeps
     # and perform absorption and truncation
-    for coord,site in ipeps.items():
-        absorb_truncate_CTM_MOVE_RIGHT(coord, ipeps, env, P, Pt)
+    for coord,site in ipeps.sites.items():
+        absorb_truncate_CTM_MOVE_RIGHT(coord, ipeps, env, P[coord], Pt[coord])
 
-def ctm_get_porjectors(R, Rt, chi, use_QR = False, tol = 1e-10):
+#####################################################################
+# compute the projectors from 4x4 TN given by coord
+#####################################################################
+
+def ctm_get_projectors_CTM_MOVE_UP(coord, ipeps, env):
+    R, Rt = halves_of_4x4_CTM_MOVE_UP(coord, ipeps, env)
+    return ctm_get_projectors_from_matrices(R, Rt, env.chi, use_QR = False, tol = 1e-10)
+
+def ctm_get_projectors_CTM_MOVE_LEFT(coord, ipeps, env):
+    R, Rt = halves_of_4x4_CTM_MOVE_LEFT(coord, ipeps, env)
+    return ctm_get_projectors_from_matrices(R, Rt, env.chi, use_QR = False, tol = 1e-10)
+
+def ctm_get_projectors_CTM_MOVE_DOWN(coord, ipeps, env):
+    R, Rt = halves_of_4x4_CTM_MOVE_DOWN(coord, ipeps, env)
+    return ctm_get_projectors_from_matrices(R, Rt, env.chi, use_QR = False, tol = 1e-10)
+
+def ctm_get_projectors_CTM_MOVE_RIGHT(coord, ipeps, env):
+    R, Rt = halves_of_4x4_CTM_MOVE_RIGHT(coord, ipeps, env)
+    return ctm_get_projectors_from_matrices(R, Rt, env.chi, use_QR = False, tol = 1e-10)
+
+#####################################################################
+# direction-independent function performing bi-diagonalization
+#####################################################################
+
+def ctm_get_projectors_from_matrices(R, Rt, chi, use_QR = False, tol = 1e-10):
     """
     Given the two tensor T and Tt (T tilde) this computes the projectors
     Computes The projectors (P, P tilde)
     (PRB 94, 075143 (2016) https://arxiv.org/pdf/1402.2859.pdf)
-    The inices of the input R, Rt are
+    The indices of the input R, Rt are
+
+        R (torch.Tensor):
+            tensor of shape (dim0, dim1)
+        Rt (torch.Tensor):
+            tensor of shape (dim0, dim1)
+        chi (int):
+            auxiliary bond dimension  
+
+    --------------------
+    |        T         |
+    --------------------
+      |         |
+     dim0      dim1
+      |         |
+    ---------  
+     \\ P //   
+     -------
+        |
+       chi
+        |
+
+
+        |
+       chi
+        |
+     -------   
+    // Pt  \\
+    ---------
+      |         |    
+     dim0      dim1
+      |         |    
+    --------------------
+    |        Rt        |
+    --------------------
+    """
+    assert R.shape == Rt.shape
+    assert len(R.shape) == 2
+
+    # QR decomposition (I do not understand why this is usefull)
+    if use_QR:
+        Q_qr, R_qr = torch.qr(R)
+        Qt_qr, Rt_qr = torch.qr(Rt)
+        R = R_qr
+        Rt = Rt_qr
+
+    #  SVD decomposition
+    M = torch.mm(R.transpose(1, 0), Rt)
+    U, S, V = truncated_svd(M, chi, tol) # M = USV^{T}
+    S_sqrt = 1.0 / torch.sqrt(S)
+
+    # Construct projectors
+    P = torch.einsum('i,ij->ij', S_sqrt, torch.mm(U.transpose(1, 0),R.transpose(1, 0)))
+    Pt = torch.einsum('i,ij->ij', S_sqrt, torch.mm(V.transpose(1, 0),Rt.transpose(1, 0)))
+
+    return P, Pt
+
+def ctm_get_projectors(R, Rt, chi, use_QR = False, tol = 1e-10):
+    """
+    Given the two tensor T and Tt (T tilde) this computes the projectors
+    Computes The projectors (P, P tilde)
+    (PRB 94, 075143 (2016) https://arxiv.org/pdf/1402.2859.pdf)
+    The indices of the input R, Rt are
 
         R (torch.Tensor):
             tensor of shape (dim0, dim1, dim2, dim3)
@@ -386,6 +489,7 @@ def ctm_get_porjectors(R, Rt, chi, use_QR = False, tol = 1e-10):
     Pt = torch.mm(S_sqrt, torch.mm(V.transpose(1, 0),Rt.transpose(1, 0)))
 
     return P, Pt
+
 #####################################################################
 # functions performing absorption and truncation step
 #####################################################################
@@ -396,6 +500,8 @@ def absorb_truncate_CTM_MOVE_UP(coord, ipeps, env, P, Pt):
     T2 = env.T[(coord,(-1,0))]
     C2 = env.C[(coord,(-1,-1))]
     A = ipeps.site(coord)
+    P = P.view(env.chi,A.size()[3],env.chi)
+    Pt = Pt.view(env.chi,A.size()[1],env.chi)
 
     # 0--C1
     #    1
@@ -451,6 +557,10 @@ def absorb_truncate_CTM_MOVE_UP(coord, ipeps, env, P, Pt):
     T = torch.tensordot(nT, P,([1,3],[0,1]))
     T = T.contiguous()
 
+    C1 = C1/torch.max(C1)
+    C2 = C2/torch.max(C2)
+    T = T/torch.max(T)
+
 def absorb_truncate_CTM_MOVE_LEFT(coord, ipeps, env, P, Pt):
     C1 = env.C[(coord,(-1,-1))]
     T1 = env.T[(coord,(0,-1))]
@@ -458,6 +568,8 @@ def absorb_truncate_CTM_MOVE_LEFT(coord, ipeps, env, P, Pt):
     T2 = env.T[(coord,(0,1))]
     C2 = env.C[(coord,(-1,1))]
     A = ipeps.site(coord)
+    P = P.view(env.chi,A.size()[0],env.chi)
+    Pt = Pt.view(env.chi,A.size()[2],env.chi)
 
     # C1--1 0--T1--2
     # |        |
@@ -511,6 +623,10 @@ def absorb_truncate_CTM_MOVE_LEFT(coord, ipeps, env, P, Pt):
     T = torch.tensordot(nT, Pt,([1,2],[0,1]))
     T = T.permute(0,2,1).contiguous()
 
+    C1 = C1/torch.max(C1)
+    C2 = C2/torch.max(C2)
+    T = T/torch.max(T)
+
 def absorb_truncate_CTM_MOVE_DOWN(coord, ipeps, env, P, Pt):
     C1 = env.C[(coord,(-1,1))]
     T1 = env.T[(coord,(-1,0))]
@@ -518,6 +634,8 @@ def absorb_truncate_CTM_MOVE_DOWN(coord, ipeps, env, P, Pt):
     T2 = env.T[(coord,(1,0))]
     C2 = env.C[(coord,(1,1))]
     A = ipeps.site(coord)
+    P = P.view(env.chi,A.size()[1],env.chi)
+    Pt = Pt.view(env.chi,A.size()[3],env.chi)
 
     # 0->1
     # T1--2->2
@@ -527,12 +645,12 @@ def absorb_truncate_CTM_MOVE_DOWN(coord, ipeps, env, P, Pt):
     nC1 = torch.tensordot(C1,T1,([0],[1]))
 
     # 1->0
-    # T1--2 0--
+    # T1--2 1--
     # |        |        
     # |        Pt--2->1
     # |        |
-    # C1--0 1--   
-    C1 = torch.tensordot(nC1, Pt, ([0,2],[1,0]))
+    # C1--0 0--   
+    C1 = torch.tensordot(nC1, Pt, ([0,2],[0,1]))
 
     #    1<-0
     # 2<-1--T2
@@ -573,6 +691,10 @@ def absorb_truncate_CTM_MOVE_DOWN(coord, ipeps, env, P, Pt):
     T = torch.tensordot(nT, Pt,([1,3],[0,1]))
     T = T.permute(1,0,2).contiguous()
 
+    C1 = C1/torch.max(C1)
+    C2 = C2/torch.max(C2)
+    T = T/torch.max(T)
+
 def absorb_truncate_CTM_MOVE_RIGHT(coord, ipeps, env, P, Pt):
     C1 = env.C[(coord,(1,1))]
     T1 = env.T[(coord,(0,1))]
@@ -580,6 +702,8 @@ def absorb_truncate_CTM_MOVE_RIGHT(coord, ipeps, env, P, Pt):
     T2 = env.T[(coord,(0,-1))]
     C2 = env.C[(coord,(1,-1))]
     A = ipeps.site(coord)
+    P = P.view(env.chi,A.size()[2],env.chi)
+    Pt = Pt.view(env.chi,A.size()[0],env.chi)
 
     #       0->1     0
     # 2<-1--T1--2 1--C1
@@ -630,6 +754,10 @@ def absorb_truncate_CTM_MOVE_RIGHT(coord, ipeps, env, P, Pt):
     #           2 
     T = torch.tensordot(nT, P,([1,3],[0,1]))
     T = T.contiguous()
+
+    C1 = C1/torch.max(C1)
+    C2 = C2/torch.max(C2)
+    T = T/torch.max(T)
 
 #####################################################################
 # functions building pair of 4x2 (or 2x4) halves of 4x4 TN
@@ -720,10 +848,10 @@ def halves_of_4x4_CTM_MOVE_RIGHT(coord, ipeps, env):
 # functions building 2x2 Corner
 #####################################################################
 def c2x2_LU(coord, ipeps, env):
-    C = env.C[(coord,(-1,-1))]
-    T1 = env.T[(coord,(0,-1))]
-    T2 = env.T[(coord,(-1,0))]
-    A = ipeps.site[coord]
+    C = env.C[(ipeps.vertexToSite(coord),(-1,-1))]
+    T1 = env.T[(ipeps.vertexToSite(coord),(0,-1))]
+    T2 = env.T[(ipeps.vertexToSite(coord),(-1,0))]
+    A = ipeps.site(coord)
 
     # C--10--T1--2
     # 0      1
@@ -753,10 +881,10 @@ def c2x2_LU(coord, ipeps, env):
     return C2x2
 
 def c2x2_RU(coord, ipeps, env):
-    C = env.C[(coord,(1,-1))]
-    T1 = env.T[(coord,(1,0))]
-    T2 = env.T[(coord,(-1,0))]
-    A = ipeps.site[coord]
+    C = env.C[(ipeps.vertexToSite(coord),(1,-1))]
+    T1 = env.T[(ipeps.vertexToSite(coord),(1,0))]
+    T2 = env.T[(ipeps.vertexToSite(coord),(0,-1))]
+    A = ipeps.site(coord)
 
     # 0--C
     #    1
@@ -788,10 +916,10 @@ def c2x2_RU(coord, ipeps, env):
     return C2x2
 
 def c2x2_RD(coord, ipeps, env):
-    C = env.C[(coord,(1,1))]
-    T1 = env.T[(coord,(0,1))]
-    T2 = env.T[(coord,(1,0))]
-    A = ipeps.site[coord]
+    C = env.C[(ipeps.vertexToSite(coord),(1,1))]
+    T1 = env.T[(ipeps.vertexToSite(coord),(0,1))]
+    T2 = env.T[(ipeps.vertexToSite(coord),(1,0))]
+    A = ipeps.site(coord)
 
     #    1<-0        0
     # 2<-1--T1--2 1--C
@@ -821,10 +949,10 @@ def c2x2_RD(coord, ipeps, env):
     return C2x2
 
 def c2x2_LD(coord, ipeps, env):
-    C = env.C[(coord,(-1,1))]
-    T1 = env.T[(coord,(-1,0))]
-    T2 = env.T[(coord,(1,0))]
-    A = ipeps.site[coord]
+    C = env.C[(ipeps.vertexToSite(coord),(-1,1))]
+    T1 = env.T[(ipeps.vertexToSite(coord),(-1,0))]
+    T2 = env.T[(ipeps.vertexToSite(coord),(0,1))]
+    A = ipeps.site(coord)
 
     # 0->1
     # T1--2
